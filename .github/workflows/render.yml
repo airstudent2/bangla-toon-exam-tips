@@ -1,0 +1,74 @@
+name: Render Bangla Toon Video
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    name: Render 9:16 Animation
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies (FFmpeg & Bengali fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-beng fonts-noto-extra fonts-lohit-beng-bengali
+
+      - name: Install Python dependencies & Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Verify assets
+        run: |
+          ls -lh assets/
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 assets/voiceover.mp3
+
+      - name: Render Video
+        run: |
+          python render.py
+
+      - name: Verify rendered video
+        run: |
+          ls -lh bangla_toon_v1.mp4
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,duration,r_frame_rate -of csv=p=0 bangla_toon_v1.mp4
+
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bangla-toon-video-mp4
+          path: bangla_toon_v1.mp4
+          retention-days: 14
+
+      - name: Create Release with Video Download
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/')
+        with:
+          tag_name: v1.0.0
+          name: Bangla Toon Flat v1.0.0 (Release)
+          body: |
+            ## 🎬 Bangla Toon Flat — Exam Study Tips Video
+            - **Format**: 9:16 (1080×1920) | 30 FPS | MP4 (H.264 + AAC)
+            - **Length**: ~60 seconds
+            - **File**: `bangla_toon_v1.mp4`
+          files: bangla_toon_v1.mp4
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
